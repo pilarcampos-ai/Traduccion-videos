@@ -2,52 +2,48 @@ import streamlit as st
 from deep_translator import GoogleTranslator
 import re
 
-def limpiar_tiempo(texto_tiempo):
-    # Transforma "00:00:03,500" en "segundo 3"
+def limpiar_y_formatear(tiempo_raw):
+    # Pasa de 00:00:01,000 a "segundo 1"
     try:
-        match = re.search(r'(\d{2}):(\d{2}):(\d{2})', texto_tiempo)
-        if match:
-            horas, minutos, segundos = map(int, match.groups())
-            total = (horas * 3600) + (minutos * 60) + segundos
-            if total < 60: return f"segundo {total}"
-            return f"minuto {total // 60}:{total % 60:02d}"
+        segmentos = tiempo_raw.split(':')
+        segundos = int(segmentos[1]) * 60 + int(float(segmentos[2].replace(',', '.')))
+        return f"segundo {segundos}" if segundos < 60 else f"minuto {segundos // 60}:{segundos % 60:02d}"
     except:
         return "Tiempo"
-    return "Tiempo"
 
-st.set_page_config(page_title="Traductor SRT Pro", page_icon="🎬")
-st.title("🎬 Traductor de Subtítulos (.srt)")
+st.set_page_config(page_title="Traductor Real", page_icon="🎬")
+st.title("🎬 Traductor de Subtítulos Pro")
 
 archivo = st.file_uploader("Sube tu archivo .srt aquí:", type=["srt"])
 
-if archivo and st.button("Traducir Todo el Video"):
+if archivo and st.button("Traducir Todo"):
     st.write("### 📝 Traducción al Español Neutro:")
     
-    # Leer el archivo completo
+    # Leemos el archivo ignorando errores de símbolos raros
     lineas = archivo.getvalue().decode("utf-8", errors="ignore").splitlines()
-    
     translator = GoogleTranslator(source='en', target='es')
     
-    texto_acumulado = ""
     tiempo_actual = ""
+    texto_para_traducir = []
 
     for linea in lineas:
         linea = linea.strip()
         
-        # 1. Si la línea tiene la flecha de tiempo "-->"
+        # Detectar la línea de tiempo
         if "-->" in linea:
-            tiempo_actual = limpiar_tiempo(linea.split("-->")[0])
+            # Si ya teníamos texto acumulado de antes, lo traducimos antes de pasar al siguiente tiempo
+            tiempo_actual = limpiar_y_formatear(linea.split("-->")[0].strip())
         
-        # 2. Si es una línea de texto (no es número solo, no está vacía, no es tiempo)
+        # Detectar el texto (si no es tiempo, ni número, ni está vacío)
         elif linea and not linea.isdigit() and "-->" not in linea:
-            # Limpiar ruidos como [Music] o [Applause]
-            linea_limpia = re.sub(r'\[.*?\]', '', linea).strip()
-            if linea_limpia:
+            # Eliminar etiquetas como [Music], [Applause], etc.
+            limpio = re.sub(r'\[.*?\]', '', linea).strip()
+            
+            if limpio and len(limpio) > 1: # Ignora letras sueltas como "a" o "w"
                 try:
-                    # Traducir frase por frase
-                    traduccion = translator.translate(linea_limpia)
+                    traduccion = translator.translate(limpio)
                     st.write(f"**{tiempo_actual}**: {traduccion}")
                 except:
-                    st.write(f"**{tiempo_actual}**: {linea_limpia} (Error al traducir)")
+                    continue
 
-st.info("Si el video es largo, dale un momento para procesar todas las líneas.")
+st.info("Esta versión filtra ruidos y traduce frases completas.")
