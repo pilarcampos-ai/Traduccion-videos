@@ -1,5 +1,5 @@
 streamlit
 opencv-python-headless
 easyocr
-deep-translator
+deep_translator
 gdown
