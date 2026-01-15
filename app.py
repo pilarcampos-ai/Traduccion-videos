@@ -21,32 +21,35 @@ url = st.text_input("Pega el link de YouTube:")
 
 if st.button("Traducir"):
     if url:
-        with st.spinner("1. Descargando audio del video..."):
+        with st.spinner("Procesando... (Esto tardará un momento)"):
             try:
-                # Opciones para descargar audio sin bloqueos
+                # 1. Configuración de descarga
                 ydl_opts = {
                     'format': 'bestaudio/best',
                     'outtmpl': 'audio_local.mp3',
                     'postprocessors': [{'key': 'FFmpegExtractAudio','preferredcodec': 'mp3'}],
                     'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
                 }
+                
+                # Ejecutar descarga
                 with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                     ydl.download([url])
 
-                st.write("2. Escuchando y traduciendo (IA)...")
-                # Cargamos el modelo más ligero para que la App no se cuelgue
+                st.write("Escuchando y traduciendo...")
+                
+                # 2. Cargar modelo IA
                 model = whisper.load_model("tiny")
                 
-                # Traducimos directamente
+                # 3. Traducir
                 result = model.transcribe("audio_local.mp3", language="es")
 
-                st.subheader("Traducción Terminada:")
+                st.subheader("Traducción:")
                 for segment in result['segments']:
-                    # Formato minuto a minuto que pediste
                     st.markdown(f"**{format_time(segment['start'])}**: {segment['text'].strip()}")
 
-                # Borrar archivo temporal
-                os.remove("audio_local.mp3")
+                # Limpieza
+                if os.path.exists("audio_local.mp3"):
+                    os.remove("audio_local.mp3")
 
             except Exception as e:
                 st.error(f"Error: {e}")
