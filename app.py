@@ -11,33 +11,36 @@ def format_time(seconds):
         remaining_seconds = seconds % 60
         return f"minuto {minutes}:{remaining_seconds:02d}"
 
-st.set_page_config(page_title="Traductor de Archivos", layout="centered")
-st.title("🎬 Traductor de Video/Audio a Español")
-st.write("Sube tu archivo para evitar los bloqueos de YouTube.")
+st.set_page_config(page_title="Traductor Sin Bloqueos", page_icon="🎬")
+st.title("🎬 Traductor por Archivo (Sin Errores)")
+st.write("Sube tu video o audio descargado para obtener la traducción minuto a minuto.")
 
-# Componente para subir archivos
-uploaded_file = st.file_uploader("Elige un archivo de video o audio (mp4, mp3, m4a, wav)", type=["mp4", "mp3", "m4a", "wav"])
+# Aquí cambiamos el link por un cargador de archivos
+uploaded_file = st.file_uploader("Sube tu video o audio aquí:", type=["mp4", "mp3", "m4a", "wav"])
 
 if uploaded_file is not None:
-    if st.button("Traducir archivo"):
-        with st.spinner("Procesando archivo... Esto puede tardar unos minutos."):
+    if st.button("Empezar Traducción"):
+        with st.spinner("La IA está escuchando tu archivo... Esto tarda un par de minutos."):
             try:
-                # Guardar el archivo temporalmente
-                with open("temp_file", "wb") as f:
+                # Guardar el archivo subido de forma temporal
+                with open("archivo_temp", "wb") as f:
                     f.write(uploaded_file.getbuffer())
 
-                # Cargar IA Whisper
+                # Cargamos la IA (Versión ligera para que no se cuelgue)
                 model = whisper.load_model("tiny")
                 
-                # Transcribir y traducir
-                result = model.transcribe("temp_file", language="es")
+                # Traducir (Task translate lo pasa a inglés, pero forzamos español)
+                result = model.transcribe("archivo_temp", language="es")
 
-                st.subheader("Resultado minuto a minuto:")
+                st.success("¡Traducción completada!")
+                st.subheader("Resultado:")
+                
                 for segment in result['segments']:
                     st.write(f"**{format_time(segment['start'])}**: {segment['text'].strip()}")
 
-                # Limpiar
-                os.remove("temp_file")
+                # Borramos el temporal para no llenar el servidor
+                if os.path.exists("archivo_temp"):
+                    os.remove("archivo_temp")
 
             except Exception as e:
-                st.error(f"Error: {e}")
+                st.error(f"Ocurrió un error: {e}")
