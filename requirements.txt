@@ -1,4 +1,4 @@
 streamlit
-yt-dlp==2025.1.12
+yt-dlp
 openai-whisper
 setuptools
