@@ -1,48 +1,49 @@
 import streamlit as st
 import whisper
+import gdown
 import os
+from deep_translator import GoogleTranslator
 
-def format_time(seconds):
-    seconds = int(seconds)
-    if seconds < 60:
-        return f"segundo {seconds}"
-    else:
-        minutes = seconds // 60
-        remaining_seconds = seconds % 60
-        return f"minuto {minutes}:{remaining_seconds:02d}"
+st.set_page_config(page_title="Traductor de Voz en Off")
 
-st.set_page_config(page_title="Traductor Estable", page_icon="🎬")
-st.title("🎬 Traductor de Video/Audio")
+st.title("🎙️ Traductor de Audio (Whisper AI)")
+st.write("Ideal para videos con locución. Escucha el audio y lo traduce.")
 
-uploaded_file = st.file_uploader("Sube tu archivo aquí:", type=["mp4", "mp3", "m4a", "wav"])
+drive_url = st.text_input("Pega el link de Google Drive (Público):")
 
-if uploaded_file is not None:
-    if st.button("Empezar Traducción"):
-        with st.spinner("Traduciendo..."):
-            try:
-                # 1. Guardar archivo temporal
-                with open("temp_file", "wb") as f:
-                    f.write(uploaded_file.getbuffer())
-
-                # 2. Modelo Tiny (El que te funcionó)
-                model = whisper.load_model("tiny")
-                
-                # 3. Traducción estándar
-                result = model.transcribe("temp_file", language="es")
-
-                st.subheader("Resultado:")
-                
-                for segment in result['segments']:
-                    # Solo mostramos si hay texto para evitar segundos vacíos al inicio
-                    texto = segment['text'].strip()
-                    if texto:
-                        # CORRECCIÓN DE TIEMPO: 
-                        # Si Whisper dice que empieza en 0 pero tú sabes que es el 3, 
-                        # es porque el primer segmento es muy largo.
-                        # Mostramos el tiempo tal cual lo detecta la IA.
-                        st.write(f"**{format_time(segment['start'])}**: {texto}")
-
-                os.remove("temp_file")
-
-            except Exception as e:
-                st.error(f"Error: {e}")
+if drive_url and st.button("Procesar Audio"):
+    status = st.empty()
+    try:
+        # 1. Descarga
+        output = "video_audio.mp4"
+        status.info("Descargando video de Drive...")
+        gdown.download(url=drive_url, output=output, quiet=False, fuzzy=True)
+        
+        # 2. IA de Audio (Modelo Tiny para no saturar RAM)
+        status.info("Cargando IA de voz (Whisper Tiny)...")
+        model = whisper.load_model("tiny")
+        
+        # 3. Transcribir y Traducir
+        status.info("Escuchando y traduciendo...")
+        resultado = model.transcribe(output)
+        translator = GoogleTranslator(source='en', target='es')
+        
+        st.subheader("Traducción del audio:")
+        
+        for segment in resultado['segments']:
+            inicio = int(segment['start'])
+            texto_en = segment['text']
+            
+            # Traducir frase
+            traduccion = translator.translate(texto_en)
+            
+            # Formato tiempo [MM:SS]
+            tiempo = f"{inicio // 60:02d}:{inicio % 60:02d}"
+            st.write(f"**[{tiempo}]**: {traduccion}")
+            
+        cap.release()
+        os.remove(output)
+        status.success("¡Completado!")
+        
+    except Exception as e:
+        st.error(f"Error: {e}")
