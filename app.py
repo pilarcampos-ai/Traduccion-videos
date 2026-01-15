@@ -1,57 +1,48 @@
 import streamlit as st
-import cv2
-import easyocr
-from deep_translator import GoogleTranslator
-import gdown
+import whisper
 import os
 
-st.set_page_config(page_title="Traductor Rápido")
-st.title("🎬 Traductor Visual (Modo Ligero)")
+def format_time(seconds):
+    seconds = int(seconds)
+    if seconds < 60:
+        return f"segundo {seconds}"
+    else:
+        minutes = seconds // 60
+        remaining_seconds = seconds % 60
+        return f"minuto {minutes}:{remaining_seconds:02d}"
 
-url_drive = st.text_input("Enlace de Google Drive:")
+st.set_page_config(page_title="Traductor Estable", page_icon="🎬")
+st.title("🎬 Traductor de Video/Audio")
 
-if url_drive and st.button("Empezar"):
-    # Usamos un contenedor para que veas que la app está viva
-    status = st.empty()
-    status.info("Descargando video...")
-    
-    try:
-        output = "v.mp4"
-        gdown.download(url=url_drive, output=output, quiet=False, fuzzy=True)
-        
-        # Iniciamos el lector (solo una vez para no gastar RAM)
-        reader = easyocr.Reader(['en'], gpu=False) # Forzamos a que no use GPU (más lento pero no se cae)
-        translator = GoogleTranslator(source='en', target='es')
-        
-        cap = cv2.VideoCapture(output)
-        fps = int(cap.get(cv2.CAP_PROP_FPS))
-        count = 0
-        vistos = set()
+uploaded_file = st.file_uploader("Sube tu archivo aquí:", type=["mp4", "mp3", "m4a", "wav"])
 
-        status.success("Analizando... (puedes ver los resultados abajo)")
+if uploaded_file is not None:
+    if st.button("Empezar Traducción"):
+        with st.spinner("Traduciendo..."):
+            try:
+                # 1. Guardar archivo temporal
+                with open("temp_file", "wb") as f:
+                    f.write(uploaded_file.getbuffer())
 
-        while cap.isOpened():
-            ret, frame = cap.read()
-            if not ret: break
-            
-            # Analiza cada 2 SEGUNDOS para ir más rápido y no saturar el servidor
-            if count % (fps * 2) == 0:
-                h, w, _ = frame.shape
-                # Miramos solo la parte de abajo
-                corte = frame[int(h*0.80):int(h*0.95), :]
+                # 2. Modelo Tiny (El que te funcionó)
+                model = whisper.load_model("tiny")
                 
-                res = reader.readtext(corte, detail=0)
-                txt = " ".join(res).strip()
-                
-                if len(txt) > 8 and txt not in vistos:
-                    traduccion = translator.translate(txt)
-                    st.write(f"**{count//fps//60}:{count//fps%60:02d}** -> {traduccion}")
-                    vistos.add(txt)
-            count += 1
-            
-        cap.release()
-        os.remove(output)
-        status.info("¡Análisis terminado!")
+                # 3. Traducción estándar
+                result = model.transcribe("temp_file", language="es")
 
-    except Exception as e:
-        st.error(f"Error: {e}")
+                st.subheader("Resultado:")
+                
+                for segment in result['segments']:
+                    # Solo mostramos si hay texto para evitar segundos vacíos al inicio
+                    texto = segment['text'].strip()
+                    if texto:
+                        # CORRECCIÓN DE TIEMPO: 
+                        # Si Whisper dice que empieza en 0 pero tú sabes que es el 3, 
+                        # es porque el primer segmento es muy largo.
+                        # Mostramos el tiempo tal cual lo detecta la IA.
+                        st.write(f"**{format_time(segment['start'])}**: {texto}")
+
+                os.remove("temp_file")
+
+            except Exception as e:
+                st.error(f"Error: {e}")
