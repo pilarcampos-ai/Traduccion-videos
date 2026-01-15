@@ -1,5 +1,6 @@
 streamlit
-opencv-python-headless
-easyocr
+openai-whisper
+setuptools
+ffmpeg-python
 deep_translator
 gdown
