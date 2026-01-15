@@ -3,40 +3,57 @@ import cv2
 import easyocr
 from deep_translator import GoogleTranslator
 import numpy as np
+import os
 
-st.title("🎬 Traductor de Subtítulos Pegados (OCR)")
-st.write("Usa esto para videos que NO tienen voz, solo texto en pantalla.")
+st.set_page_config(page_title="Traductor Visual", page_icon="👁️")
+st.title("👁️ Traductor de Subtítulos Pegados")
+st.write("Para videos sin voz con texto integrado en la imagen.")
 
-file = st.file_uploader("Sube el video:", type=["mp4", "mov", "avi"])
+# Aumentar límite de subida a 200MB (Límite de Streamlit Cloud)
+file = st.file_uploader("Sube el video (Máx 200MB):", type=["mp4", "mov", "avi"])
 
 if file is not None:
-    if st.button("Escanear y Traducir Texto Visual"):
-        with st.spinner("Escaneando fotogramas... esto puede tardar."):
-            # Guardar video temporal
-            with open("temp_video.mp4", "wb") as f:
-                f.write(file.getbuffer())
-            
-            cap = cv2.VideoCapture("temp_video.mp4")
-            reader = easyocr.Reader(['en', 'es']) # Lee inglés y español
-            translator = GoogleTranslator(source='en', target='es')
-            
-            fps = cap.get(cv2.CAP_PROP_FPS)
-            count = 0
-            textos_detectados = set()
-
-            while cap.isOpened():
-                ret, frame = cap.read()
-                if not ret: break
+    if st.button("Escanear Texto del Video"):
+        with st.spinner("Leyendo fotogramas... Esto es un proceso visual y toma tiempo."):
+            try:
+                # Guardar temporal
+                with open("temp_v.mp4", "wb") as f:
+                    f.write(file.getbuffer())
                 
-                # Escaneamos 1 frame por cada segundo para no colapsar la memoria
-                if count % int(fps) == 0:
-                    results = reader.readtext(frame)
-                    for (bbox, text, prob) in results:
-                        if len(text) > 3 and text not in textos_detectados:
-                            segundo = int(count / fps)
-                            traduccion = translator.translate(text)
-                            st.write(f"**Segundo {segundo}**: {traduccion}")
-                            textos_detectados.add(text)
-                count += 1
-            
-            cap.release()
+                cap = cv2.VideoCapture("temp_v.mp4")
+                # Inicializar lector de imágenes (OCR)
+                reader = easyocr.Reader(['en']) 
+                translator = GoogleTranslator(source='en', target='es')
+                
+                fps = cap.get(cv2.CAP_PROP_FPS)
+                count = 0
+                ultimos_textos = []
+
+                st.subheader("Traducción Visual Detectada:")
+
+                while cap.isOpened():
+                    ret, frame = cap.read()
+                    if not ret: break
+                    
+                    # Analizar 1 frame por cada segundo para no colapsar la app
+                    if count % int(fps) == 0:
+                        segundo = int(count / fps)
+                        # Detectar texto en el frame
+                        result = reader.readtext(frame, detail=0)
+                        
+                        if result:
+                            texto_unido = " ".join(result).strip()
+                            # Solo traducir si el texto es nuevo y tiene longitud real
+                            if len(texto_unido) > 3 and texto_unido not in ultimos_textos:
+                                traduccion = translator.translate(texto_unido)
+                                st.write(f"**Segundo {segundo}**: {traduccion}")
+                                # Guardamos los últimos para no repetir lo mismo
+                                ultimos_textos.append(texto_unido)
+                                if len(ultimos_textos) > 5: ultimos_textos.pop(0)
+
+                    count += 1
+                
+                cap.release()
+                os.remove("temp_v.mp4")
+            except Exception as e:
+                st.error(f"Error: {e}")
