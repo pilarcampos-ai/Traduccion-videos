@@ -5,55 +5,64 @@ from deep_translator import GoogleTranslator
 import numpy as np
 import os
 
-st.set_page_config(page_title="Traductor Visual", page_icon="👁️")
-st.title("👁️ Traductor de Subtítulos Pegados")
-st.write("Para videos sin voz con texto integrado en la imagen.")
+# Función para convertir segundos a tu formato preferido
+def format_time(seconds):
+    if seconds < 60:
+        return f"segundo {seconds}"
+    return f"minuto {seconds // 60}:{seconds % 60:02d}"
 
-# Aumentar límite de subida a 200MB (Límite de Streamlit Cloud)
-file = st.file_uploader("Sube el video (Máx 200MB):", type=["mp4", "mov", "avi"])
+st.set_page_config(page_title="Traductor Visual Pro", page_icon="👁️")
+st.title("👁️ Traductor de Texto en Pantalla")
+st.write("Ideal para videos sin voz pero con subtítulos pegados en la imagen.")
 
-if file is not None:
-    if st.button("Escanear Texto del Video"):
-        with st.spinner("Leyendo fotogramas... Esto es un proceso visual y toma tiempo."):
+video_file = st.file_uploader("Sube tu video aquí:", type=["mp4", "mov", "avi"])
+
+if video_file is not None:
+    if st.button("Escanear y Traducir"):
+        with st.spinner("Leyendo los subtítulos del video..."):
             try:
-                # Guardar temporal
-                with open("temp_v.mp4", "wb") as f:
-                    f.write(file.getbuffer())
+                # 1. Guardar el video para que el sistema pueda leerlo
+                with open("video_proceso.mp4", "wb") as f:
+                    f.write(video_file.getbuffer())
                 
-                cap = cv2.VideoCapture("temp_v.mp4")
-                # Inicializar lector de imágenes (OCR)
-                reader = easyocr.Reader(['en']) 
+                # 2. Configurar el lector visual (Inglés)
+                reader = easyocr.Reader(['en'])
                 translator = GoogleTranslator(source='en', target='es')
                 
+                cap = cv2.VideoCapture("video_proceso.mp4")
                 fps = cap.get(cv2.CAP_PROP_FPS)
+                
+                st.subheader("Traducción minuto a minuto:")
+                textos_vistos = set()
                 count = 0
-                ultimos_textos = []
-
-                st.subheader("Traducción Visual Detectada:")
 
                 while cap.isOpened():
                     ret, frame = cap.read()
                     if not ret: break
                     
-                    # Analizar 1 frame por cada segundo para no colapsar la app
+                    # Analizamos el video 1 vez por segundo para que sea rápido
                     if count % int(fps) == 0:
-                        segundo = int(count / fps)
-                        # Detectar texto en el frame
-                        result = reader.readtext(frame, detail=0)
+                        segundo_actual = int(count / fps)
                         
-                        if result:
-                            texto_unido = " ".join(result).strip()
-                            # Solo traducir si el texto es nuevo y tiene longitud real
-                            if len(texto_unido) > 3 and texto_unido not in ultimos_textos:
-                                traduccion = translator.translate(texto_unido)
-                                st.write(f"**Segundo {segundo}**: {traduccion}")
-                                # Guardamos los últimos para no repetir lo mismo
-                                ultimos_textos.append(texto_unido)
-                                if len(ultimos_textos) > 5: ultimos_textos.pop(0)
+                        # RECORTAR LA IMAGEN: Enfocamos solo la parte de abajo (donde están los subs)
+                        alto, ancho, _ = frame.shape
+                        zona_subtitulos = frame[int(alto*0.70):alto, :] 
+                        
+                        # Leer texto de la imagen
+                        resultado = reader.readtext(zona_subtitulos, detail=0)
+                        texto_en = " ".join(resultado).strip()
+                        
+                        # Si detectamos texto nuevo y largo, traducimos
+                        if len(texto_en) > 3 and texto_en not in textos_vistos:
+                            traduccion = translator.translate(texto_en)
+                            st.write(f"**{format_time(segundo_actual)}**: {traduccion}")
+                            textos_vistos.add(texto_en)
 
                     count += 1
                 
                 cap.release()
-                os.remove("temp_v.mp4")
+                os.remove("video_proceso.mp4")
+                st.success("¡Lectura completada!")
+
             except Exception as e:
-                st.error(f"Error: {e}")
+                st.error(f"Error al procesar: {e}")
