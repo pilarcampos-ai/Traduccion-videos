@@ -1,54 +1,42 @@
 import streamlit as st
+import cv2
+import easyocr
 from deep_translator import GoogleTranslator
-import re
+import numpy as np
 
-def limpiar_tiempo(texto_tiempo):
-    try:
-        match = re.search(r'(\d{2}):(\d{2}):(\d{2})', texto_tiempo)
-        if match:
-            horas, minutos, segundos = map(int, match.groups())
-            total = (horas * 3600) + (minutos * 60) + segundos
-            if total < 60: return f"segundo {total}"
-            return f"minuto {total // 60}:{total % 60:02d}"
-    except: return "Tiempo"
-    return "Tiempo"
+st.title("🎬 Traductor de Subtítulos Pegados (OCR)")
+st.write("Usa esto para videos que NO tienen voz, solo texto en pantalla.")
 
-st.set_page_config(page_title="Traductor Profesional", page_icon="🎬")
-st.title("🎬 Traductor de Subtítulos (.srt)")
+file = st.file_uploader("Sube el video:", type=["mp4", "mov", "avi"])
 
-archivo = st.file_uploader("Sube tu archivo .srt aquí:", type=["srt"])
-
-if archivo and st.button("Traducir Todo el Video"):
-    st.write("### 📝 Traducción al Español Neutro:")
-    
-    lineas = archivo.getvalue().decode("utf-8", errors="ignore").splitlines()
-    translator = GoogleTranslator(source='en', target='es')
-    
-    tiempo_actual = ""
-    encontró_texto = False
-
-    for linea in lineas:
-        linea = linea.strip()
-        
-        if "-->" in linea:
-            tiempo_actual = limpiar_tiempo(linea.split("-->")[0])
-        
-        elif linea and not linea.isdigit() and "-->" not in linea:
-            # 1. Eliminar ruidos entre corchetes o paréntesis
-            linea_limpia = re.sub(r'\[.*?\]|\(.*?\)', '', linea).strip()
+if file is not None:
+    if st.button("Escanear y Traducir Texto Visual"):
+        with st.spinner("Escaneando fotogramas... esto puede tardar."):
+            # Guardar video temporal
+            with open("temp_video.mp4", "wb") as f:
+                f.write(file.getbuffer())
             
-            # 2. FILTRO CLAVE: Solo traducir si la frase tiene sentido (más de 2 letras)
-            # Esto elimina los "a", "w", "oh", "v" que te molestan
-            if len(linea_limpia) > 2:
-                try:
-                    traduccion = translator.translate(linea_limpia)
-                    if traduccion.lower() not in ['a', 'w', 'oh', 'v', 'y']:
-                        st.write(f"**{tiempo_actual}**: {traduccion}")
-                        encontró_texto = True
-                except:
-                    continue
+            cap = cv2.VideoCapture("temp_video.mp4")
+            reader = easyocr.Reader(['en', 'es']) # Lee inglés y español
+            translator = GoogleTranslator(source='en', target='es')
+            
+            fps = cap.get(cv2.CAP_PROP_FPS)
+            count = 0
+            textos_detectados = set()
 
-    if not encontró_texto:
-        st.warning("⚠️ El archivo SRT parece no tener diálogos reales, solo sonidos ambientales.")
-
-st.info("Tip: Si el video tiene poca voz, asegúrate de descargar el SRT de 'English' y no el 'English (auto-generated)' si está disponible.")
+            while cap.isOpened():
+                ret, frame = cap.read()
+                if not ret: break
+                
+                # Escaneamos 1 frame por cada segundo para no colapsar la memoria
+                if count % int(fps) == 0:
+                    results = reader.readtext(frame)
+                    for (bbox, text, prob) in results:
+                        if len(text) > 3 and text not in textos_detectados:
+                            segundo = int(count / fps)
+                            traduccion = translator.translate(text)
+                            st.write(f"**Segundo {segundo}**: {traduccion}")
+                            textos_detectados.add(text)
+                count += 1
+            
+            cap.release()
