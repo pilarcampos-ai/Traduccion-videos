@@ -5,25 +5,26 @@ from deep_translator import GoogleTranslator
 import gdown
 import os
 
-st.set_page_config(page_title="Traductor Visual PXN", layout="centered")
+# Configuración para que la app sea ancha y se vea bien
+st.set_page_config(page_title="Traductor Visual Pro", layout="wide")
 
 def format_time(seconds):
     return f"segundo {seconds}" if seconds < 60 else f"minuto {seconds // 60}:{seconds % 60:02d}"
 
-st.title("🎬 Lector Visual de Tutoriales")
-st.write("Pegá el link de tu video de Google Drive (aseguráte que sea público).")
+st.title("🎬 Traductor de Subtítulos Pegados (vía Drive)")
+st.write("Usa esta opción para videos pesados. El programa leerá el texto de la imagen.")
 
-# Campo para el link de Drive
-drive_url = st.text_input("Link de Google Drive:")
+# Entrada para el link de Google Drive
+drive_url = st.text_input("Pegá aquí el enlace de compartir de Google Drive:")
 
-if drive_url and st.button("Traducir Video"):
-    with st.spinner("Descargando y analizando visualmente..."):
+if drive_url and st.button("Empezar Traducción Visual"):
+    with st.spinner("Descargando video y activando IA Visual..."):
         try:
-            output = 'video_tutorial.mp4'
-            # gdown descarga el video de Drive directamente
+            output = 'video_descargado.mp4'
+            # gdown descarga el archivo directamente de Drive al servidor
             gdown.download(url=drive_url, output=output, quiet=False, fuzzy=True)
             
-            # IA Visual (OCR)
+            # Cargamos el motor de lectura visual
             reader = easyocr.Reader(['en'])
             translator = GoogleTranslator(source='en', target='es')
             
@@ -32,22 +33,23 @@ if drive_url and st.button("Traducir Video"):
             textos_vistos = set()
             count = 0
 
-            st.subheader("Traducción Paso a Paso:")
+            st.subheader("Traducción segundo a segundo:")
 
             while cap.isOpened():
                 ret, frame = cap.read()
                 if not ret: break
                 
-                # Analiza cada 1 segundo para encontrar texto pegado en la imagen
+                # Analizamos 1 cuadro por segundo
                 if count % int(fps) == 0:
                     h, w, _ = frame.shape
-                    # RECORTA la zona donde aparecen los subtítulos en el video del PXN
-                    corte = frame[int(h*0.65):int(h*0.95), :]
+                    # RECORTAMOS la zona de abajo (donde están los subtítulos en tu video)
+                    corte = frame[int(h*0.75):h, :]
                     
-                    res = reader.readtext(corte, detail=0)
-                    texto_en = " ".join(res).strip()
+                    # Extraer texto de la imagen
+                    resultado = reader.readtext(corte, detail=0)
+                    texto_en = " ".join(resultado).strip()
                     
-                    if len(texto_en) > 4 and texto_en not in textos_vistos:
+                    if len(texto_en) > 3 and texto_en not in textos_vistos:
                         traduccion = translator.translate(texto_en)
                         st.write(f"**{format_time(count//fps)}**: {traduccion}")
                         textos_vistos.add(texto_en)
@@ -56,7 +58,7 @@ if drive_url and st.button("Traducir Video"):
             cap.release()
             if os.path.exists(output):
                 os.remove(output)
-            st.success("¡Tutorial traducido!")
+            st.success("¡Análisis completado!")
 
         except Exception as e:
-            st.error(f"Error: Asegurate que el link sea público. Detalle: {e}")
+            st.error(f"Error: Asegúrate de que el link de Drive sea PÚBLICO. Detalle: {e}")
