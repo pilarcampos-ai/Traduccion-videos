@@ -3,7 +3,6 @@ import yt_dlp
 import whisper
 import os
 
-# Configuración de formato de tiempo
 def format_time(seconds):
     seconds = int(seconds)
     if seconds < 60:
@@ -21,23 +20,25 @@ url = st.text_input("Pega el link de YouTube:")
 
 if st.button("Traducir"):
     if url:
-        with st.spinner("Procesando... (Esto tardará un momento)"):
+        with st.spinner("Procesando... Esto tardará un par de minutos."):
             try:
                 # 1. Configuración de descarga
                 ydl_opts = {
                     'format': 'bestaudio/best',
                     'outtmpl': 'audio_local.mp3',
-                    'postprocessors': [{'key': 'FFmpegExtractAudio','preferredcodec': 'mp3'}],
+                    'postprocessors': [{
+                        'key': 'FFmpegExtractAudio',
+                        'preferredcodec': 'mp3',
+                    }],
                     'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
                 }
                 
-                # Ejecutar descarga
                 with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                     ydl.download([url])
 
                 st.write("Escuchando y traduciendo...")
                 
-                # 2. Cargar modelo IA
+                # 2. Cargar modelo IA (Versión ligera)
                 model = whisper.load_model("tiny")
                 
                 # 3. Traducir
@@ -47,7 +48,6 @@ if st.button("Traducir"):
                 for segment in result['segments']:
                     st.markdown(f"**{format_time(segment['start'])}**: {segment['text'].strip()}")
 
-                # Limpieza
                 if os.path.exists("audio_local.mp3"):
                     os.remove("audio_local.mp3")
 
