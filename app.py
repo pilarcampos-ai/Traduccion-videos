@@ -2,6 +2,7 @@ import streamlit as st
 import whisper
 import os
 
+# Configuración de formato de tiempo
 def format_time(seconds):
     seconds = int(seconds)
     if seconds < 60:
@@ -11,36 +12,51 @@ def format_time(seconds):
         remaining_seconds = seconds % 60
         return f"minuto {minutes}:{remaining_seconds:02d}"
 
-st.set_page_config(page_title="Traductor Sin Bloqueos", page_icon="🎬")
-st.title("🎬 Traductor por Archivo (Sin Errores)")
-st.write("Sube tu video o audio descargado para obtener la traducción minuto a minuto.")
+st.set_page_config(page_title="Traductor Pro Preciso", page_icon="🏎️")
+st.title("🎬 Traductor Pro (Tiempos Corregidos)")
+st.write("Esta versión usa el modelo 'Base' para mayor precisión en los segundos.")
 
-# Aquí cambiamos el link por un cargador de archivos
-uploaded_file = st.file_uploader("Sube tu video o audio aquí:", type=["mp4", "mp3", "m4a", "wav"])
+uploaded_file = st.file_uploader("Sube tu video o audio:", type=["mp4", "mp3", "m4a", "wav"])
 
 if uploaded_file is not None:
     if st.button("Empezar Traducción"):
-        with st.spinner("La IA está escuchando tu archivo... Esto tarda un par de minutos."):
+        with st.spinner("Analizando con precisión... esto puede tardar un poco más que antes."):
             try:
-                # Guardar el archivo subido de forma temporal
+                # Guardar temporal
                 with open("archivo_temp", "wb") as f:
                     f.write(uploaded_file.getbuffer())
 
-                # Cargamos la IA (Versión ligera para que no se cuelgue)
-                model = whisper.load_model("tiny")
+                # CARGA DE MODELO MÁS PRECISO
+                model = whisper.load_model("base")
                 
-                # Traducir (Task translate lo pasa a inglés, pero forzamos español)
-                result = model.transcribe("archivo_temp", language="es")
+                # Transcripción con parámetros de estabilidad
+                # beam_size ayuda a que no se salte el inicio de las frases
+                result = model.transcribe("archivo_temp", language="es", beam_size=5)
 
                 st.success("¡Traducción completada!")
-                st.subheader("Resultado:")
+                
+                # Preparar texto para descargar
+                texto_final = ""
                 
                 for segment in result['segments']:
-                    st.write(f"**{format_time(segment['start'])}**: {segment['text'].strip()}")
+                    # Solo procesar si hay texto real (evita los segundos 0 fantasmas)
+                    frase = segment['text'].strip()
+                    if frase:
+                        tiempo = format_time(segment['start'])
+                        linea = f"**{tiempo}**: {frase}"
+                        st.write(linea)
+                        texto_final += f"{tiempo}: {frase}\n"
 
-                # Borramos el temporal para no llenar el servidor
+                # Botón para descargar el resultado
+                st.download_button(
+                    label="Descargar traducción (.txt)",
+                    data=texto_final,
+                    file_name="traduccion.txt",
+                    mime="text/plain"
+                )
+
                 if os.path.exists("archivo_temp"):
                     os.remove("archivo_temp")
 
             except Exception as e:
-                st.error(f"Ocurrió un error: {e}")
+                st.error(f"Error: {e}")
