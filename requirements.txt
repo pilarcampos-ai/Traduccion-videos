@@ -1,4 +1,4 @@
 streamlit
-yt-dlp>=2024.12.06
+pytube
 openai-whisper
 setuptools
