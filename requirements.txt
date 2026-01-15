@@ -1,4 +1,2 @@
 streamlit
-openai-whisper
-setuptools
 deep-translator
