@@ -1,5 +1,4 @@
 import streamlit as st
-from pytube import YouTube
 import whisper
 import os
 
@@ -12,37 +11,33 @@ def format_time(seconds):
         remaining_seconds = seconds % 60
         return f"minuto {minutes}:{remaining_seconds:02d}"
 
-st.set_page_config(page_title="Traductor Sin Bloqueos", layout="centered")
-st.title("🎬 Traductor de YouTube (Motor Pytube)")
+st.set_page_config(page_title="Traductor de Archivos", layout="centered")
+st.title("🎬 Traductor de Video/Audio a Español")
+st.write("Sube tu archivo para evitar los bloqueos de YouTube.")
 
-url = st.text_input("Pega el link de YouTube:")
+# Componente para subir archivos
+uploaded_file = st.file_uploader("Elige un archivo de video o audio (mp4, mp3, m4a, wav)", type=["mp4", "mp3", "m4a", "wav"])
 
-if st.button("Traducir"):
-    if url:
-        with st.spinner("Descargando audio (esto evita el error 403)..."):
+if uploaded_file is not None:
+    if st.button("Traducir archivo"):
+        with st.spinner("Procesando archivo... Esto puede tardar unos minutos."):
             try:
-                # 1. Descarga con Pytube
-                yt = YouTube(url)
-                # Seleccionamos solo el audio para que sea rápido
-                audio_stream = yt.streams.filter(only_audio=True).first()
-                archivo_descargado = audio_stream.download(filename="audio_temp.mp4")
+                # Guardar el archivo temporalmente
+                with open("temp_file", "wb") as f:
+                    f.write(uploaded_file.getbuffer())
 
-                st.write("Interpretando y traduciendo a español neutro...")
-                
-                # 2. IA Whisper
+                # Cargar IA Whisper
                 model = whisper.load_model("tiny")
-                result = model.transcribe(archivo_descargado, language="es")
+                
+                # Transcribir y traducir
+                result = model.transcribe("temp_file", language="es")
 
-                st.subheader("Resultado:")
+                st.subheader("Resultado minuto a minuto:")
                 for segment in result['segments']:
                     st.write(f"**{format_time(segment['start'])}**: {segment['text'].strip()}")
 
-                # Limpieza
-                if os.path.exists(archivo_descargado):
-                    os.remove(archivo_descargado)
+                # Limpiar
+                os.remove("temp_file")
 
             except Exception as e:
                 st.error(f"Error: {e}")
-                st.info("Si el error persiste, YouTube ha bloqueado la IP de este servidor. Prueba borrar la App en Streamlit Cloud y crearla de nuevo para cambiar de IP.")
-    else:
-        st.warning("Introduce un link.")
