@@ -2,7 +2,6 @@ import streamlit as st
 import whisper
 import os
 
-# Configuración de formato de tiempo
 def format_time(seconds):
     seconds = int(seconds)
     if seconds < 60:
@@ -12,48 +11,35 @@ def format_time(seconds):
         remaining_seconds = seconds % 60
         return f"minuto {minutes}:{remaining_seconds:02d}"
 
-st.set_page_config(page_title="Traductor Pro Preciso", page_icon="🏎️")
-st.title("🎬 Traductor Pro (Tiempos Corregidos)")
-st.write("Esta versión usa el modelo 'Base' para mayor precisión en los segundos.")
+st.set_page_config(page_title="Traductor Pro", page_icon="🎬")
+st.title("🎬 Traductor por Archivo (Versión Estable)")
 
-uploaded_file = st.file_uploader("Sube tu video o audio:", type=["mp4", "mp3", "m4a", "wav"])
+uploaded_file = st.file_uploader("Sube tu video o audio aquí:", type=["mp4", "mp3", "m4a", "wav"])
 
 if uploaded_file is not None:
     if st.button("Empezar Traducción"):
-        with st.spinner("Analizando con precisión... esto puede tardar un poco más que antes."):
+        with st.spinner("Traduciendo..."):
             try:
-                # Guardar temporal
+                # 1. Guardar archivo
                 with open("archivo_temp", "wb") as f:
                     f.write(uploaded_file.getbuffer())
 
-                # CARGA DE MODELO MÁS PRECISO
-                model = whisper.load_model("base")
+                # 2. Usamos 'tiny' de nuevo (EL QUE FUNCIONA)
+                model = whisper.load_model("tiny")
                 
-                # Transcripción con parámetros de estabilidad
-                # beam_size ayuda a que no se salte el inicio de las frases
-                result = model.transcribe("archivo_temp", language="es", beam_size=5)
+                # 3. TRUCO PARA EL TIEMPO: 
+                # Agregamos initial_prompt para que la IA entienda mejor el inicio
+                result = model.transcribe("archivo_temp", language="es", initial_prompt="Traducción técnica de simracing.")
 
-                st.success("¡Traducción completada!")
-                
-                # Preparar texto para descargar
-                texto_final = ""
+                st.subheader("Resultado:")
                 
                 for segment in result['segments']:
-                    # Solo procesar si hay texto real (evita los segundos 0 fantasmas)
-                    frase = segment['text'].strip()
-                    if frase:
-                        tiempo = format_time(segment['start'])
-                        linea = f"**{tiempo}**: {frase}"
-                        st.write(linea)
-                        texto_final += f"{tiempo}: {frase}\n"
-
-                # Botón para descargar el resultado
-                st.download_button(
-                    label="Descargar traducción (.txt)",
-                    data=texto_final,
-                    file_name="traduccion.txt",
-                    mime="text/plain"
-                )
+                    # Arreglo: Solo muestra si el tiempo es mayor a 0.5 o tiene texto real
+                    # Esto evita que el primer subtítulo diga "0" si el audio empieza después
+                    if segment['start'] < 0.5 and not segment['text'].strip():
+                        continue
+                    
+                    st.write(f"**{format_time(segment['start'])}**: {segment['text'].strip()}")
 
                 if os.path.exists("archivo_temp"):
                     os.remove("archivo_temp")
