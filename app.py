@@ -2,48 +2,53 @@ import streamlit as st
 from deep_translator import GoogleTranslator
 import re
 
-def limpiar_y_formatear(tiempo_raw):
-    # Pasa de 00:00:01,000 a "segundo 1"
+def limpiar_tiempo(texto_tiempo):
     try:
-        segmentos = tiempo_raw.split(':')
-        segundos = int(segmentos[1]) * 60 + int(float(segmentos[2].replace(',', '.')))
-        return f"segundo {segundos}" if segundos < 60 else f"minuto {segundos // 60}:{segundos % 60:02d}"
-    except:
-        return "Tiempo"
+        match = re.search(r'(\d{2}):(\d{2}):(\d{2})', texto_tiempo)
+        if match:
+            horas, minutos, segundos = map(int, match.groups())
+            total = (horas * 3600) + (minutos * 60) + segundos
+            if total < 60: return f"segundo {total}"
+            return f"minuto {total // 60}:{total % 60:02d}"
+    except: return "Tiempo"
+    return "Tiempo"
 
-st.set_page_config(page_title="Traductor Real", page_icon="🎬")
-st.title("🎬 Traductor de Subtítulos Pro")
+st.set_page_config(page_title="Traductor Profesional", page_icon="🎬")
+st.title("🎬 Traductor de Subtítulos (.srt)")
 
 archivo = st.file_uploader("Sube tu archivo .srt aquí:", type=["srt"])
 
-if archivo and st.button("Traducir Todo"):
+if archivo and st.button("Traducir Todo el Video"):
     st.write("### 📝 Traducción al Español Neutro:")
     
-    # Leemos el archivo ignorando errores de símbolos raros
     lineas = archivo.getvalue().decode("utf-8", errors="ignore").splitlines()
     translator = GoogleTranslator(source='en', target='es')
     
     tiempo_actual = ""
-    texto_para_traducir = []
+    encontró_texto = False
 
     for linea in lineas:
         linea = linea.strip()
         
-        # Detectar la línea de tiempo
         if "-->" in linea:
-            # Si ya teníamos texto acumulado de antes, lo traducimos antes de pasar al siguiente tiempo
-            tiempo_actual = limpiar_y_formatear(linea.split("-->")[0].strip())
+            tiempo_actual = limpiar_tiempo(linea.split("-->")[0])
         
-        # Detectar el texto (si no es tiempo, ni número, ni está vacío)
         elif linea and not linea.isdigit() and "-->" not in linea:
-            # Eliminar etiquetas como [Music], [Applause], etc.
-            limpio = re.sub(r'\[.*?\]', '', linea).strip()
+            # 1. Eliminar ruidos entre corchetes o paréntesis
+            linea_limpia = re.sub(r'\[.*?\]|\(.*?\)', '', linea).strip()
             
-            if limpio and len(limpio) > 1: # Ignora letras sueltas como "a" o "w"
+            # 2. FILTRO CLAVE: Solo traducir si la frase tiene sentido (más de 2 letras)
+            # Esto elimina los "a", "w", "oh", "v" que te molestan
+            if len(linea_limpia) > 2:
                 try:
-                    traduccion = translator.translate(limpio)
-                    st.write(f"**{tiempo_actual}**: {traduccion}")
+                    traduccion = translator.translate(linea_limpia)
+                    if traduccion.lower() not in ['a', 'w', 'oh', 'v', 'y']:
+                        st.write(f"**{tiempo_actual}**: {traduccion}")
+                        encontró_texto = True
                 except:
                     continue
 
-st.info("Esta versión filtra ruidos y traduce frases completas.")
+    if not encontró_texto:
+        st.warning("⚠️ El archivo SRT parece no tener diálogos reales, solo sonidos ambientales.")
+
+st.info("Tip: Si el video tiene poca voz, asegúrate de descargar el SRT de 'English' y no el 'English (auto-generated)' si está disponible.")
