@@ -1,63 +1,64 @@
 import streamlit as st
-from youtube_transcript_api import YouTubeTranscriptApi
-from deep_translator import GoogleTranslator
-import re
+import yt_dlp
+import os
+from openai import OpenAI
 
-st.set_page_config(page_title="Traductor de Subtítulos YouTube", layout="centered")
+# Configura tu clave de API de OpenAI
+# Recomiendo ponerla en los "Secrets" de Streamlit para mayor seguridad
+client = OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
 
-st.title("🎬 Traductor de Subtítulos YouTube")
-st.write("Pegá un link de YouTube con subtítulos en inglés y obtené la traducción minuto a minuto.")
-
-def extract_video_id(url):
-    pattern = r"(?:v=|\/)([0-9A-Za-z_-]{11})"
-    match = re.search(pattern, url)
-    return match.group(1) if match else None
-
-youtube_url = st.text_input("🔗 Link del video de YouTube")
-
-if st.button("Traducir subtítulos"):
-    if not youtube_url:
-        st.error("Pegá un link de YouTube válido.")
+def format_time(seconds):
+    """Convierte segundos al formato 'segundo X' o 'minuto X:XX'"""
+    seconds = int(seconds)
+    if seconds < 60:
+        return f"segundo {seconds}"
     else:
-        video_id = extract_video_id(youtube_url)
+        minutes = seconds // 60
+        remaining_seconds = seconds % 60
+        return f"minuto {minutes}:{remaining_seconds:02d}"
 
-        if not video_id:
-            st.error("No se pudo detectar el ID del video.")
-        else:
+st.title("Traductor de Videos Pro (Inglés a Español)")
+
+url = st.text_input("Pega el link de YouTube aquí:")
+
+if st.button("Traducir Video"):
+    if url:
+        with st.spinner("Extrayendo audio y traduciendo... esto puede tardar un minuto."):
             try:
-                with st.spinner("Obteniendo subtítulos en inglés..."):
-                    transcript = YouTubeTranscriptApi.get_transcript(
-                        video_id,
-                        languages=["en"]
-                    )
+                # 1. Descargar Audio
+                ydl_opts = {
+                    'format': 'bestaudio/best',
+                    'outtmpl': 'audio_temp.mp3',
+                    'postprocessors': [{
+                        'key': 'FFmpegExtractAudio',
+                        'preferredcodec': 'mp3',
+                    }],
+                }
+                with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                    ydl.download([url])
 
-                st.success("Subtítulos encontrados. Traduciendo...")
-
-                translator = GoogleTranslator(source="en", target="es")
-                output = []
-
-                for entry in transcript:
-                    start = int(entry["start"])
-                    text_en = entry["text"].replace("\n", " ")
-
-                    text_es = translator.translate(text_en)
-
-                    if start < 60:
-                        time_label = f"segundo {start}"
-                    else:
-                        time_label = f"minuto {start // 60}:{start % 60:02d}"
-
-                    output.append(f"{time_label}: {text_es}")
-
-                st.text_area(
-                    "Resultado final",
-                    value="\n".join(output),
-                    height=400
+                # 2. Traducir con OpenAI Whisper
+                audio_file = open("audio_temp.mp3", "rb")
+                # La tarea 'translate' traduce automáticamente cualquier idioma al inglés.
+                # Para español neutro, pediremos una transcripción y luego una traducción.
+                transcript = client.audio.translations.create(
+                    model="whisper-1", 
+                    file=audio_file,
+                    response_format="verbose_json"
                 )
+
+                # 3. Mostrar resultados con TU formato
+                st.subheader("Resultado de la traducción:")
+                for segment in transcript.segments:
+                    time_label = format_time(segment['start'])
+                    texto = segment['text']
+                    st.write(f"**{time_label}:** {texto}")
+                
+                # Limpiar archivo temporal
+                os.remove("audio_temp.mp3")
 
             except Exception as e:
-                st.error(
-                    "No se pudieron obtener o traducir los subtítulos. "
-                    "Verificá que el video tenga subtítulos en inglés."
-                )
+                st.error(f"Ocurrió un error: {e}")
+    else:
+        st.warning("Por favor, introduce un link.")
 
