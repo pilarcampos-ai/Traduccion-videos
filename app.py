@@ -2,56 +2,64 @@ import streamlit as st
 import cv2
 import easyocr
 from deep_translator import GoogleTranslator
-import yt_dlp
 import os
+import numpy as np
 
-st.title("👁️ Traductor Visual de YouTube")
+def format_time(seconds):
+    return f"segundo {seconds}" if seconds < 60 else f"minuto {seconds // 60}:{seconds % 60:02d}"
 
-# Usamos el link para que TÚ no tengas que subir el archivo pesado
-url = st.text_input("Pega el link de YouTube aquí:")
+st.set_page_config(page_title="Lector de Subtítulos Visuales", page_icon="👁️")
+st.title("🎬 Traductor Visual de Tutoriales")
+st.write("Esta herramienta lee el texto pegado en la imagen y lo traduce.")
 
-if url and st.button("Analizar Video"):
-    with st.spinner("Descargando video internamente para analizarlo..."):
-        try:
-            # Configuramos para bajar el video en la calidad más baja (para ir rápido)
-            ydl_opts = {
-                'format': 'worst', 
-                'outtmpl': 'video_a_leer.mp4',
-                'quiet': True
-            }
-            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                ydl.download([url])
-            
-            # Ahora iniciamos el OCR (Lectura de imagen)
-            reader = easyocr.Reader(['en'])
-            translator = GoogleTranslator(source='en', target='es')
-            cap = cv2.VideoCapture('video_a_leer.mp4')
-            fps = cap.get(cv2.CAP_PROP_FPS)
-            
-            st.subheader("Traducción del texto pegado:")
-            textos_vistos = set()
-            count = 0
+video_file = st.file_uploader("Sube el video del volante PXN:", type=["mp4", "mov", "avi"])
 
-            while cap.isOpened():
-                ret, frame = cap.read()
-                if not ret: break
+if video_file is not None:
+    if st.button("Escanear y Traducir"):
+        with st.spinner("La IA está leyendo el video cuadro por cuadro..."):
+            try:
+                # Guardar video temporal
+                with open("temp_video.mp4", "wb") as f:
+                    f.write(video_file.getbuffer())
                 
-                if count % int(fps) == 0: # Analiza 1 segundo por vez
-                    # Recorte de la zona inferior (subtítulos)
-                    h, w, _ = frame.shape
-                    corte = frame[int(h*0.75):h, :]
-                    
-                    resultado = reader.readtext(corte, detail=0)
-                    texto_en = " ".join(resultado).strip()
-                    
-                    if len(texto_en) > 3 and texto_en not in textos_vistos:
-                        traduccion = translator.translate(texto_en)
-                        st.write(f"**Min {int(count/fps/60)}:{int(count/fps%60):02d}**: {traduccion}")
-                        textos_vistos.add(texto_en)
-                count += 1
-            
-            cap.release()
-            os.remove('video_a_leer.mp4')
+                # Configurar IA Visual e Idioma
+                reader = easyocr.Reader(['en']) # Lee inglés del video
+                translator = GoogleTranslator(source='en', target='es')
+                
+                cap = cv2.VideoCapture("temp_video.mp4")
+                fps = cap.get(cv2.CAP_PROP_FPS)
+                
+                st.subheader("Traducción Paso a Paso:")
+                textos_vistos = set()
+                count = 0
 
-        except Exception as e:
-            st.error(f"Error: {e}")
+                while cap.isOpened():
+                    ret, frame = cap.read()
+                    if not ret: break
+                    
+                    # Escanear 1 vez por segundo para precisión
+                    if count % int(fps) == 0:
+                        segundo_actual = int(count / fps)
+                        
+                        # RECORTAR: Nos enfocamos en el área de subtítulos (centro-inferior)
+                        h, w, _ = frame.shape
+                        zona_texto = frame[int(h*0.65):int(h*0.95), :] 
+                        
+                        # OCR: Leer el texto
+                        resultados = reader.readtext(zona_texto, detail=0)
+                        texto_en = " ".join(resultados).strip()
+                        
+                        # Traducir si hay contenido nuevo
+                        if len(texto_en) > 4 and texto_en not in textos_vistos:
+                            traduccion = translator.translate(texto_en)
+                            st.write(f"**{format_time(segundo_actual)}**: {traduccion}")
+                            textos_vistos.add(texto_en)
+
+                    count += 1
+                
+                cap.release()
+                os.remove("temp_video.mp4")
+                st.success("¡Análisis completado!")
+
+            except Exception as e:
+                st.error(f"Error técnico: {e}")
