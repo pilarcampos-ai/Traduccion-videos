@@ -7,41 +7,32 @@ from deep_translator import GoogleTranslator
 st.set_page_config(page_title="Traductor de Voz en Off")
 
 st.title("🎙️ Traductor de Audio (Whisper AI)")
-st.write("Ideal para videos con locución. Escucha el audio y lo traduce.")
+st.write("Escucha el audio del video de Drive y lo traduce al español.")
 
-drive_url = st.text_input("Pega el link de Google Drive (Público):")
+drive_url = st.text_input("Pegá el link de Google Drive (Público):")
 
 if drive_url and st.button("Procesar Audio"):
     status = st.empty()
     try:
-        # 1. Descarga
         output = "video_audio.mp4"
         status.info("Descargando video de Drive...")
         gdown.download(url=drive_url, output=output, quiet=False, fuzzy=True)
         
-        # 2. IA de Audio (Modelo Tiny para no saturar RAM)
+        # Usamos el modelo 'tiny' que es el más liviano para que no se caiga el servidor
         status.info("Cargando IA de voz (Whisper Tiny)...")
         model = whisper.load_model("tiny")
         
-        # 3. Transcribir y Traducir
         status.info("Escuchando y traduciendo...")
         resultado = model.transcribe(output)
         translator = GoogleTranslator(source='en', target='es')
         
         st.subheader("Traducción del audio:")
-        
         for segment in resultado['segments']:
             inicio = int(segment['start'])
-            texto_en = segment['text']
-            
-            # Traducir frase
-            traduccion = translator.translate(texto_en)
-            
-            # Formato tiempo [MM:SS]
+            traduccion = translator.translate(segment['text'])
             tiempo = f"{inicio // 60:02d}:{inicio % 60:02d}"
             st.write(f"**[{tiempo}]**: {traduccion}")
             
-        cap.release()
         os.remove(output)
         status.success("¡Completado!")
         
